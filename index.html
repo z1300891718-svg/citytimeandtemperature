@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全球城市 & 中国省会实时气温</title>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-main: #2c3e50;
+            --accent-blue: #003399;
+            --accent-green: #27ae60;
+            --accent-orange: #d35400;
+            --china-red: #c0392b;
+        }
+
+        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
+        header { text-align: center; margin-bottom: 30px; position: sticky; top: 0; background: var(--bg-color); z-index: 100; padding: 10px; border-bottom: 1px solid #ddd; }
+        h1 { margin: 0; font-size: 1.6em; }
+        
+        .continent-section { margin-bottom: 40px; }
+        .continent-title { 
+            font-size: 1.4em; border-left: 6px solid var(--accent-blue); 
+            padding-left: 12px; margin-bottom: 15px; background: #e9ecef; 
+            padding-top: 5px; padding-bottom: 5px; border-radius: 4px;
+        }
+
+        .oceania-style { border-left-color: #ffcd00; background: #fff9e6; }
+        .china-style { border-left-color: var(--china-red); background: #fdf2f2; }
+
+        .grid-container { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); 
+            gap: 10px; 
+        }
+
+        .card { 
+            background: var(--card-bg); border-radius: 8px; padding: 10px; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05); transition: all 0.3s ease;
+            border: 1px solid #eee;
+        }
+
+        .city-name { font-size: 0.95em; font-weight: bold; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .label-tag { font-size: 0.7em; color: #7f8c8d; margin-bottom: 6px; display: block; }
+        .info-row { display: flex; justify-content: space-between; margin-top: 5px; font-size: 0.8em; }
+        .time-val { color: var(--accent-orange); font-weight: 500; }
+        .temp-val { color: var(--accent-green); font-weight: bold; font-size: 1.1em; }
+
+        #loading-overlay { text-align: center; padding: 40px; font-style: italic; color: #666; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🌍 全球主要城市 & 中国省会实时气温</h1>
+    <div style="font-size: 0.8em; color: #888; margin-top: 5px;">大洋洲置顶(已加珀斯) · 中国省会置底 · 组内按气温降序</div>
+</header>
+
+<div id="loading-overlay">正在同步全球天气数据并排序...</div>
+<div id="content"></div>
+
+<script>
+const cityLibrary = {
+    "大洋洲 (Oceania)": [
+        { name: "悉尼", label: "澳大利亚", lat: -33.86, lon: 151.20, tz: "Australia/Sydney" },
+        { name: "墨尔本", label: "澳大利亚", lat: -37.81, lon: 144.96, tz: "Australia/Melbourne" },
+        { name: "布里斯班", label: "澳大利亚", lat: -27.46, lon: 153.02, tz: "Australia/Brisbane" },
+        { name: "珀斯", label: "澳大利亚", lat: -31.95, lon: 115.86, tz: "Australia/Perth" },
+        { name: "堪培拉", label: "澳大利亚", lat: -35.28, lon: 149.12, tz: "Australia/Canberra" },
+        { name: "奥克兰", label: "新西兰", lat: -36.84, lon: 174.76, tz: "Pacific/Auckland" }
+    ],
+    "亚洲 (Asia)": [
+        { name: "东京", label: "日本", lat: 35.68, lon: 139.65, tz: "Asia/Tokyo" },
+        { name: "首尔", label: "韩国", lat: 37.56, lon: 126.97, tz: "Asia/Seoul" },
+        { name: "新加坡", label: "新加坡", lat: 1.35, lon: 103.81, tz: "Asia/Singapore" },
+        { name: "曼谷", label: "泰国", lat: 13.75, lon: 100.50, tz: "Asia/Bangkok" },
+        { name: "吉隆坡", label: "马来西亚", lat: 3.13, lon: 101.68, tz: "Asia/Kuala_Lumpur" },
+        { name: "雅加达", label: "印尼", lat: -6.20, lon: 106.84, tz: "Asia/Jakarta" },
+        { name: "马尼拉", label: "菲律宾", lat: 14.59, lon: 120.98, tz: "Asia/Manila" },
+        { name: "孟买", label: "印度", lat: 19.07, lon: 72.87, tz: "Asia/Kolkata" },
+        { name: "德里", label: "印度", lat: 28.61, lon: 77.20, tz: "Asia/Kolkata" },
+        { name: "利雅得", label: "沙特", lat: 24.71, lon: 46.67, tz: "Asia/Riyadh" },
+        { name: "伊斯坦布尔", label: "土耳其", lat: 41.00, lon: 28.97, tz: "Europe/Istanbul" }
+    ],
+    "欧洲 (Europe)": [
+        { name: "伦敦", label: "英国", lat: 51.50, lon: -0.12, tz: "Europe/London" },
+        { name: "巴黎", label: "法国", lat: 48.85, lon: 2.35, tz: "Europe/Paris" },
+        { name: "柏林", label: "德国", lat: 52.52, lon: 13.40, tz: "Europe/Berlin" },
+        { name: "马德里", label: "西班牙", lat: 40.41, lon: -3.70, tz: "Europe/Madrid" },
+        { name: "罗马", label: "意大利", lat: 41.90, lon: 12.49, tz: "Europe/Rome" },
+        { name: "莫斯科", label: "俄罗斯", lat: 55.75, lon: 37.61, tz: "Europe/Moscow" },
+        { name: "阿姆斯特丹", label: "荷兰", lat: 52.36, lon: 4.90, tz: "Europe/Amsterdam" }
+    ],
+    "美洲 (Americas)": [
+        { name: "纽约", label: "美国", lat: 40.71, lon: -74.00, tz: "America/New_York" },
+        { name: "洛杉矶", label: "美国", lat: 34.05, lon: -118.24, tz: "America/Los_Angeles" },
+        { name: "多伦多", label: "加拿大", lat: 43.65, lon: -79.38, tz: "America/Toronto" },
+        { name: "圣保罗", label: "巴西", lat: -23.55, lon: -46.63, tz: "America/Sao_Paulo" },
+        { name: "墨西哥城", label: "墨西哥", lat: 19.43, lon: -99.13, tz: "America/Mexico_City" },
+        { name: "布宜诺斯艾利斯", label: "阿根廷", lat: -34.60, lon: -58.38, tz: "America/Argentina/Buenos_Aires" }
+    ],
+    "中国省会及特区": [
+        { name: "北京", label: "直辖市", lat: 39.90, lon: 116.40, tz: "Asia/Shanghai" },
+        { name: "上海", label: "直辖市", lat: 31.23, lon: 121.47, tz: "Asia/Shanghai" },
+        { name: "广州", label: "广东", lat: 23.12, lon: 113.26, tz: "Asia/Shanghai" },
+        { name: "西安", label: "陕西", lat: 34.34, lon: 108.93, tz: "Asia/Shanghai" },
+        { name: "武汉", label: "湖北", lat: 30.59, lon: 114.30, tz: "Asia/Shanghai" },
+        { name: "福州", label: "福建", lat: 26.07, lon: 119.29, tz: "Asia/Shanghai" },
+        { name: "杭州", label: "浙江", lat: 30.27, lon: 120.15, tz: "Asia/Shanghai" },
+        { name: "南京", label: "江苏", lat: 32.06, lon: 118.79, tz: "Asia/Shanghai" },
+        { name: "成都", label: "四川", lat: 30.57, lon: 104.06, tz: "Asia/Shanghai" },
+        { name: "哈尔滨", label: "黑龙江", lat: 45.75, lon: 126.63, tz: "Asia/Shanghai" },
+        { name: "乌鲁木齐", label: "新疆", lat: 43.82, lon: 87.61, tz: "Asia/Shanghai" },
+        { name: "拉萨", label: "西藏", lat: 29.64, lon: 91.11, tz: "Asia/Shanghai" },
+        { name: "香港", label: "特别行政区", lat: 22.31, lon: 114.16, tz: "Asia/Hong_Kong" },
+        { name: "澳门", label: "特别行政区", lat: 22.19, lon: 113.54, tz: "Asia/Macau" },
+        { name: "台北", label: "台湾", lat: 25.03, lon: 121.56, tz: "Asia/Taipei" }
+    ]
+};
+
+async function fetchAllWeather() {
+    const promises = [];
+    for (const category in cityLibrary) {
+        cityLibrary[category].forEach(city => {
+            const p = fetch(`https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}&current_weather=true`)
+                .then(res => res.json())
+                .then(data => {
+                    city.temp = data.current_weather.temperature;
+                })
+                .catch(() => city.temp = -999);
+            promises.push(p);
+        });
+    }
+    await Promise.all(promises);
+    renderDashboard();
+}
+
+function getLocalTime(tz) {
+    return new Date().toLocaleTimeString('zh-CN', { 
+        timeZone: tz, hour12: false, hour: '2-digit', minute: '2-digit'
+    });
+}
+
+function renderDashboard() {
+    const container = document.getElementById('content');
+    const loader = document.getElementById('loading-overlay');
+    if(loader) loader.remove();
+    container.innerHTML = '';
+
+    for (const [category, cities] of Object.entries(cityLibrary)) {
+        // 核心：按温度降序排序
+        cities.sort((a, b) => b.temp - a.temp);
+
+        const section = document.createElement('div');
+        section.className = 'continent-section';
+        let titleClass = "continent-title";
+        if (category.includes("大洋洲")) titleClass += " oceania-style";
+        if (category.includes("中国")) titleClass += " china-style";
+        
+        section.innerHTML = `<div class="${titleClass}">${category}</div>`;
+        const grid = document.createElement('div');
+        grid.className = 'grid-container';
+
+        cities.forEach(city => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <span class="city-name">${city.name}</span>
+                <span class="label-tag">${city.label}</span>
+                <div class="info-row">
+                    <span class="time-val">${getLocalTime(city.tz)}</span>
+                    <span class="temp-val">${city.temp === -999 ? '--' : Math.round(city.temp) + '°C'}</span>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+        section.appendChild(grid);
+        container.appendChild(section);
+    }
+}
+
+fetchAllWeather();
+// 每一分钟刷新一次界面
+setInterval(renderDashboard, 60000);
+</script>
+</body>
+</html>
